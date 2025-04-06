@@ -1,0 +1,64 @@
+.env
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.db
+*.sqlite3
+*.log
+.idea/
+.vscode/
+.DS_Store
+*.egg-info/
+dist/
+build/
+.Python
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.tgz
+*.egg
+*.whl
+node_modules/
+coverage.xml
+htmlcov/
+.mypy_cache/
+.pytest_cache/
+__pycache__/
+*.cover
+*.coverage
+
+# PyCharm specific files
+.idea/
+.idea/*
+.idea/.idea/*
+.idea/workspace.xml
+
+# VS Code specific files
+.vscode/
+.vscode/*
+
+# MacOS specific files
+.DS_Store
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+.ipynb_checkpoints/*
+
+# Backup files created by text editors (e.g., Vim, Emacs)
+*~
+.*.swp
+*#
+.*.bak
+
+# Temporary files created by Python scripts or notebooks
+*.tmp
+*.temp
+
+# Ignore Python virtual environments created by pipenv, poetry, etc.
+Pipfile.lock
+poetry.lock
+
+# Ignore any other temporary or cache files you may have in your project.

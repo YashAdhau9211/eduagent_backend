@@ -1,0 +1,31 @@
+# Core LangChain framework
+langchain
+langchain-core
+
+# LangChain integrations
+langchain-ollama  # For Ollama LLM and Embeddings
+langchain-chroma  # For Chroma vector store integration
+langchain-community # For components like document loaders
+
+# Vector Database
+chromadb
+
+# LLM Interaction (if using ollama package directly, like in web_scraper)
+ollama
+
+# Web Scraping & HTTP Requests
+requests
+beautifulsoup4
+google-api-python-client # For Google Custom Search API
+
+# PDF Parsing (dependency for PDFPlumberLoader)
+pdfplumber
+
+# Web Framework
+streamlit
+
+# Environment Variable Management
+python-dotenv
+
+# Optional but recommended HTML parser for BeautifulSoup
+lxml
