@@ -62,8 +62,7 @@ def google_search(query, num_results=5):
         return [f"Error: Processing search results failed: {e}"] # Return error message in list
 
 
-# NOTE: Removed @st.cache_data decorator. Use Django's caching framework
-# if caching is needed for scrape_url in the backend.
+
 def scrape_url(url):
     """Scrape the main textual content from a webpage (synchronously)."""
     print(f"Scraping URL: {url}")

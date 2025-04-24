@@ -3,6 +3,7 @@
 import os
 from pathlib import Path
 from dotenv import load_dotenv # Add this import
+from datetime import timedelta # Import timedelta for token settings
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -34,14 +35,26 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django.contrib.sites',
 
     # Third-party apps
     'rest_framework',
     'corsheaders',
 
+    'rest_framework_simplejwt',
+    'dj_rest_auth',
+    'allauth',
+    'allauth.account',
+    'allauth.socialaccount',
+    'dj_rest_auth.registration',
+
     # Your apps
     'api.apps.ApiConfig', # Add your 'api' app
+    'authentication.apps.AuthenticationConfig',
 ]
+
+# <<< AUTH: Required by django.contrib.sites
+SITE_ID = 1
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware', # Add CORS middleware (place high)
@@ -52,6 +65,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'allauth.account.middleware.AccountMiddleware',
 ]
 
 ROOT_URLCONF = 'eduagent_project.urls'
@@ -90,7 +104,10 @@ DATABASES = {
 # https://docs.djangoproject.com/en/4.2/ref/settings/#auth-password-validators
 
 AUTH_PASSWORD_VALIDATORS = [
-    # ... (keep default validators) ...
+    { 'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator', },
+    { 'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator', },
+    { 'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator', },
+    { 'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator', },
 ]
 
 
@@ -123,11 +140,18 @@ REST_FRAMEWORK = {
     # 'DEFAULT_AUTHENTICATION_CLASSES': [
     #     # e.g., 'rest_framework.authentication.TokenAuthentication',
     # ],
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
+    'DEFAULT_PERMISSION_CLASSES': (
+        'rest_framework.permissions.IsAuthenticated',
+    ),
      'DEFAULT_RENDERER_CLASSES': [
         'rest_framework.renderers.JSONRenderer',
         # Add BrowsableAPIRenderer only if DEBUG is True for easy testing
         'rest_framework.renderers.BrowsableAPIRenderer' if DEBUG else '',
     ],
+    
     'DEFAULT_PARSER_CLASSES': [
         'rest_framework.parsers.JSONParser',
         'rest_framework.parsers.FormParser',
@@ -148,9 +172,81 @@ CORS_ALLOWED_ORIGINS = [
 # Or allow all origins for easy development (less secure)
 # CORS_ALLOW_ALL_ORIGINS = True
 
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'authorization', # <<< Ensure this is present
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
+
 # Allow credentials if needed (e.g., for cookies/sessions with frontend)
 # CORS_ALLOW_CREDENTIALS = True
 # --- End CORS Settings ---
+
+# --- Allauth Settings ---
+# <<< AUTH: Basic Allauth configuration
+ACCOUNT_EMAIL_VERIFICATION = 'none' # Options: 'mandatory', 'optional', 'none'. Use 'none' for testing.
+ACCOUNT_LOGIN_METHODS = {'username', 'email'}
+
+ACCOUNT_UNIQUE_EMAIL = True
+
+ACCOUNT_SIGNUP_FIELDS = {'username', 'email', 'password'}
+# --- End Allauth Settings ---
+
+# --- dj-rest-auth Settings ---
+# <<< AUTH: Configure dj-rest-auth to use JWT
+REST_AUTH = {
+    'USE_JWT': True,
+    'JWT_AUTH_HTTPONLY': False,  # Set to False to allow frontend JS to access the token
+    # <<< AUTH: Point USER_DETAILS_SERIALIZER to the one in your new 'authentication' app
+    'USER_DETAILS_SERIALIZER': 'authentication.serializers.CurrentUserSerializer',
+    'LOGIN_SERIALIZER': 'dj_rest_auth.serializers.LoginSerializer', # Default is usually fine
+    'REGISTER_SERIALIZER': 'dj_rest_auth.registration.serializers.RegisterSerializer', # Default is usually fine
+    'TOKEN_MODEL': None, # Disable DRF's default Token model since we use JWT
+    # Add other dj-rest-auth settings if needed (e.g., password reset serializers)
+}
+# --- End dj-rest-auth Settings ---
+
+# --- Simple JWT Settings ---
+# <<< AUTH: Configure JWT token behavior
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60), # e.g., 1 hour
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),    # e.g., 1 week
+    'ROTATE_REFRESH_TOKENS': True, # Issue new refresh token when old one is used
+    'BLACKLIST_AFTER_ROTATION': True, # Blacklist old refresh token after rotation
+    'UPDATE_LAST_LOGIN': True, # Update user's last_login field on token refresh
+
+    'ALGORITHM': 'HS256',
+    'SIGNING_KEY': SECRET_KEY, # Use the project's SECRET_KEY
+    'VERIFYING_KEY': None,
+    'AUDIENCE': None,
+    'ISSUER': None,
+    'JWK_URL': None,
+    'LEEWAY': 0,
+
+    'AUTH_HEADER_TYPES': ('Bearer',), # Default: Bearer <token>
+    'AUTH_HEADER_NAME': 'HTTP_AUTHORIZATION',
+    'USER_ID_FIELD': 'id',
+    'USER_ID_CLAIM': 'user_id',
+    'USER_AUTHENTICATION_RULE': 'rest_framework_simplejwt.authentication.default_user_authentication_rule',
+
+    'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
+    'TOKEN_TYPE_CLAIM': 'token_type',
+    'TOKEN_USER_CLASS': 'rest_framework_simplejwt.models.TokenUser',
+
+    'JTI_CLAIM': 'jti',
+
+    # Settings for sliding tokens (optional alternative to refresh tokens)
+    # 'SLIDING_TOKEN_REFRESH_EXP_CLAIM': 'refresh_exp',
+    # 'SLIDING_TOKEN_LIFETIME': timedelta(minutes=5),
+    # 'SLIDING_TOKEN_REFRESH_LIFETIME': timedelta(days=1),
+}
+# --- End Simple JWT Settings ---
+
 
 # --- Custom Application Settings ---
 # Base directory for storing ChromaDB vector stores

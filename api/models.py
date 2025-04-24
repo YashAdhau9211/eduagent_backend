@@ -1,16 +1,23 @@
 # api/models.py
 import uuid
 from django.db import models
+from django.conf import settings
 
 class ChatSession(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=200, default="New Chat")
     # user = models.ForeignKey(User, on_delete=models.CASCADE) # Link to user model later
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE, # <<< AUTH: If user is deleted, delete their sessions
+        related_name='chat_sessions' # <<< AUTH: How to access sessions from a user instance (user.chat_sessions.all())
+    )
     subject = models.CharField(max_length=100, blank=True, null=True) # Store associated subject
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"{self.name} ({self.id})"
+        owner_username = self.owner.username if self.owner else "Unassigned"
+        return f"{self.name} by {owner_username} ({self.id})"
 
 class ChatMessage(models.Model):
     ROLE_CHOICES = [

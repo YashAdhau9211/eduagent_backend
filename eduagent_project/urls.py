@@ -22,4 +22,7 @@ from django.urls import path, include # Add include
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include('api.urls')), # Include your app's URLs under '/api/' prefix
+    path('auth/', include('dj_rest_auth.urls')),
+    path('auth/register/', include('dj_rest_auth.registration.urls')),
+    
 ]
