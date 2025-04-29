@@ -10,8 +10,6 @@ from langchain_chroma import Chroma
 import shutil # For potentially clearing the directory
 from django.conf import settings # Import Django settings
 
-# Function to load, split, and embed data from PDF documents into Chroma vector store
-# MODIFIED: Now accepts a list of file paths
 def process_documents(pdf_paths_list, subject_persist_dir_name):
     """
     Loads, splits, and embeds PDF documents from a list of file paths
@@ -25,7 +23,6 @@ def process_documents(pdf_paths_list, subject_persist_dir_name):
     Returns:
         Chroma: The created/updated vector store instance, or None on failure.
     """
-    # Construct the full path using Django settings
     base_persist_path = settings.CHROMA_DB_ROOT_DIR
     persist_dir = os.path.join(base_persist_path, subject_persist_dir_name)
 
@@ -39,16 +36,13 @@ def process_documents(pdf_paths_list, subject_persist_dir_name):
     documents = []
     print(f"Loading {len(pdf_paths_list)} PDF file(s) from provided paths...")
 
-    # Load the documents directly using the paths
     for path in pdf_paths_list:
         file_basename = os.path.basename(path)
         try:
-            # Basic check (can be improved)
             if not path.lower().endswith('.pdf'):
                  print(f"Skipping non-PDF path: {file_basename}")
                  continue
 
-            # Check if file exists before loading (belt-and-suspenders)
             if not os.path.exists(path):
                 print(f"Error: Temporary file path does not exist: {path}")
                 continue
@@ -65,14 +59,11 @@ def process_documents(pdf_paths_list, subject_persist_dir_name):
             traceback.print_exc()
             continue # Skip this problematic file
 
-    # Cleanup note: The temporary files themselves should be cleaned up by the caller
-    # (e.g., the 'finally' block in the KnowledgeBaseView that created the temp dir and paths)
 
     if not documents:
          print("No content could be loaded from the provided PDF paths.")
          return None
 
-    # --- Splitting, Embedding, and Vector Store creation ---
     try:
         text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=1200,  # Consider making these configurable in settings.py
@@ -86,17 +77,11 @@ def process_documents(pdf_paths_list, subject_persist_dir_name):
              print("Document splitting resulted in zero chunks.")
              return None
 
-        # Get embedding model name from settings or use default
         embedding_model_name = getattr(settings, 'EMBEDDING_MODEL', 'nomic-embed-text')
         print(f"Initializing embeddings model: {embedding_model_name}...")
         embeddings = OllamaEmbeddings(model=embedding_model_name)
 
         print(f"Creating/updating vector store at: {persist_dir}")
-        # Optional: Clear directory before creating if you want fresh build always
-        # if getattr(settings, 'CLEAR_KB_ON_UPLOAD', False) and os.path.exists(persist_dir):
-        #     print(f"Clearing existing directory before rebuild: {persist_dir}")
-        #     shutil.rmtree(persist_dir)
-        #     os.makedirs(persist_dir) # Recreate it
 
         vector_store = Chroma.from_documents(
             documents=splits,
@@ -112,7 +97,6 @@ def process_documents(pdf_paths_list, subject_persist_dir_name):
         return None
 
 
-# Initialize and return a retriever for the vector store
 def get_retriever(subject_persist_dir_name):
     """
     Initializes and returns a vector store retriever from a persisted directory,
@@ -124,27 +108,19 @@ def get_retriever(subject_persist_dir_name):
     Returns:
         VectorStoreRetriever or None: Retriever instance or None if initialization fails or directory doesn't exist.
     """
-    # Construct the full path using Django settings
     base_persist_path = settings.CHROMA_DB_ROOT_DIR
     persist_dir = os.path.join(base_persist_path, subject_persist_dir_name)
 
-    # Check if the persistence directory exists and is a directory containing expected files
-    # A more robust check might look for specific Chroma files.
     if not os.path.exists(persist_dir) or not os.path.isdir(persist_dir):
         print(f"Persistence directory not found or is not a directory: {persist_dir}")
         return None
-    # Basic check if it looks like a chroma dir (can be improved)
     if not any(f.endswith('.parquet') or f == 'chroma.sqlite3' for f in os.listdir(persist_dir)):
          print(f"Persistence directory exists but may be empty or invalid: {persist_dir}")
-         # Decide if you want to return None or try loading anyway
-         # return None # Stricter check
 
     try:
-        # Initialize the embedding model (must match the one used for creation)
         embedding_model_name = getattr(settings, 'EMBEDDING_MODEL', 'nomic-embed-text')
         embeddings = OllamaEmbeddings(model=embedding_model_name)
 
-        # Load the persisted vector store
         print(f"Attempting to load vector store from: {persist_dir}")
         vector_store = Chroma(
             persist_directory=persist_dir,
@@ -152,15 +128,12 @@ def get_retriever(subject_persist_dir_name):
         )
         print(f"Successfully loaded vector store from: {persist_dir}")
 
-        # Return the vector store as a retriever
         retriever_search_type = getattr(settings, 'RETRIEVER_SEARCH_TYPE', 'mmr')
         retriever_k = getattr(settings, 'RETRIEVER_K', 3)
         print(f"Creating retriever (type={retriever_search_type}, k={retriever_k})")
         return vector_store.as_retriever(search_type=retriever_search_type, search_kwargs={"k": retriever_k})
 
     except Exception as e:
-        # Catch specific errors if possible (e.g., related to file access, Chroma init)
         print(f"Error initializing vector store or retriever from {persist_dir}: {e}")
-        # Log the full traceback for easier debugging
         traceback.print_exc()
         return None

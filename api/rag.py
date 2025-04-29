@@ -4,7 +4,6 @@ from langchain_ollama import ChatOllama
 from utils import process_documents, get_retriever
 from langchain_core.prompts import ChatPromptTemplate, HumanMessagePromptTemplate, SystemMessagePromptTemplate
 
-# Custom prompt template
 def get_custom_prompt():
     """Define and return the custom prompt template."""
     return ChatPromptTemplate.from_messages([
@@ -26,13 +25,10 @@ def get_custom_prompt():
         )
     ])
 
-# Initialize QA Chain
 def initialize_qa_chain():
-    # First check if vector store exists
     if not st.session_state.vector_store:
         return None
         
-    # If QA chain is not initialized but vector store exists, create it
     if not st.session_state.qa_chain and st.session_state.vector_store:
         try:
             llm = ChatOllama(model="deepseek-r1:1.5b", temperature=0.9)
@@ -53,7 +49,6 @@ def initialize_qa_chain():
             
     return st.session_state.qa_chain
 
-# Initialize the chatbot's memory (session states)
 def initialize_session_state():
     if "messages" not in st.session_state:
         st.session_state.messages = []
@@ -64,7 +59,6 @@ def initialize_session_state():
     if "history" not in st.session_state:
         st.session_state.history = []  # To store question-answer history
 
-# Sidebar section
 def display_sidebar():
     with st.sidebar:
         # Instructions
@@ -74,39 +68,16 @@ def display_sidebar():
         2. Click 'Create Knowledge Base'.
         3. Once documents are processed, start chatting with the bot!
         """)
-        
-        # Streamlit file uploader widget with a unique key
-        # pdfs = st.file_uploader("Upload PDF documents", type="pdf", accept_multiple_files=True, key="unique_agent_file_uploader")
 
-        
-        # Action Button with a unique key for creating the knowledge base
-        # if st.button("Create Knowledge Base", key="rag_create_kb"):
-        #     if not pdfs:
-        #         st.warning("Please upload PDF documents first!")
-        #         return
 
-        #     try:
-        #         with st.spinner("Creating knowledge base... This may take a moment."):
-        #             vector_store = process_documents(pdfs)
-        #             st.session_state.vector_store = vector_store
-        #             st.session_state.qa_chain = None  # Reset QA chain when new documents are processed
-
-        #         st.success("Knowledge base created!")  # Simple success message after completion
-
-        #     except Exception as e:
-        #         st.error(f"Error processing documents: {str(e)}")  # Show error if something goes wrong
-
-# Chat interface section
 def chat_interface():
     st.title("EduAgent.ai")
     st.markdown("Your personal textbook AI Agent powered by Deepseek 1.5B")
     
-    # Display chat messages
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
     
-    # Handle user input
     if prompt := st.chat_input("Ask about your documents"):
         st.session_state.messages.append({"role": "user", "content": prompt})
         
@@ -118,7 +89,6 @@ def chat_interface():
             
             with st.spinner("Fetching information..."):
                 try:
-                    # First check if vector store exists
                     if not st.session_state.vector_store:
                         full_response = "Please create a knowledge base by uploading PDF documents first."
                     else:
@@ -136,7 +106,6 @@ def chat_interface():
         
         st.session_state.messages.append({"role": "assistant", "content": full_response})
 
-# Main function
 def main():
     initialize_session_state()
     display_sidebar()

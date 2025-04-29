@@ -1,45 +1,36 @@
-# api/web_scraper.py
-
 import requests
 import re
 import os
 from bs4 import BeautifulSoup
-from ollama import generate # Using direct synchronous ollama generate
+from ollama import generate 
 from urllib.parse import urlparse, unquote
 from dotenv import load_dotenv
 import time
 import concurrent.futures
 import traceback # For error logging
 
-# Load environment variables (ensure .env is accessible from where Django runs)
 load_dotenv()
 
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 GOOGLE_CSE_ID = os.getenv("GOOGLE_CSE_ID")
 
-# Default system prompt (can be overridden by agent)
 SYSTEM_PROMPT = (
     "You are an educational assistant. Based *only* on the provided web content, "
     "answer the user's question accurately and concisely. If the answer is not "
     "found in the content, state that clearly. Do not add outside information."
 )
 
-# NOTE: Removed @st.cache_data decorator. Use Django's caching framework
-# if caching is needed for google_search in the backend.
 def google_search(query, num_results=5):
     """Fetch top search results using Google Custom Search API."""
     print(f"Performing Google Search for: {query}")
     if not GOOGLE_API_KEY or not GOOGLE_CSE_ID:
-         # Log error instead of using st.error
          print("❌ ERROR: Google API Key or CSE ID missing in .env file.")
-         # Return a consistent error format expected by the agent
          return ["Error: Missing Google API credentials."]
 
     search_url = "https://www.googleapis.com/customsearch/v1"
     params = {"q": query, "key": GOOGLE_API_KEY, "cx": GOOGLE_CSE_ID, "num": num_results}
 
     try:
-        # Using synchronous requests library
         response = requests.get(search_url, params=params, timeout=10)
         response.raise_for_status() # Raise HTTPError for bad responses (4xx or 5xx)
 
@@ -71,7 +62,6 @@ def scrape_url(url):
     }
     try:
         decoded_url = unquote(url)
-        # Using synchronous requests library
         response = requests.get(decoded_url, headers=headers, timeout=15, allow_redirects=True)
         response.raise_for_status()
 
@@ -80,7 +70,6 @@ def scrape_url(url):
             print(f"Skipping non-HTML content ({content_type}) at: {url}")
             return ""
 
-        # Using BeautifulSoup (synchronous)
         try:
             soup = BeautifulSoup(response.text, 'lxml')
         except:
@@ -106,10 +95,8 @@ def scrape_url(url):
         cleaned_text = re.sub(r'\n\s*\n', '\n', text_content).strip()
 
         if len(cleaned_text) < 100:
-            # print(f"Scraped content too short ({len(cleaned_text)} chars) for: {url}") # Can be noisy
             return ""
 
-        # print(f"Successfully scraped {len(cleaned_text)} characters from: {url}") # Can be noisy
         return cleaned_text
 
     except requests.exceptions.Timeout:
@@ -128,12 +115,10 @@ def scrape_url(url):
         return ""
 
 
-# This remains SYNCHRONOUS as it uses ollama.generate
-def query_llm(prompt, model="deepseek-r1:1.5b", temperature=0.3):
+def query_llm(prompt, model="deepseek-r1:1.5b", temperature=0.7):
     """Generate an AI response using Ollama (synchronously)."""
     print(f"Querying Ollama model {model} synchronously...")
     try:
-        # Using synchronous ollama.generate
         response_data = generate(
             model=model,
             prompt=prompt,
@@ -152,7 +137,6 @@ def query_llm(prompt, model="deepseek-r1:1.5b", temperature=0.3):
         error_message = f"Error generating response from LLM ({model})."
         if "connection refused" in str(e).lower():
              error_message += " Is Ollama running?"
-        # Return error message, don't raise exception here, let caller handle
         return error_message
 
 
@@ -165,11 +149,7 @@ def extract_clean_answer(llm_response):
     return clean_answer, thinking_process
 
 
-# Standalone test function - NOTE: This requires Streamlit to run
-# To run: Install streamlit (pip install streamlit) then run: streamlit run api/web_scraper.py
-# This main block will NOT run when imported by Django/Agent.
 def web_scraper_main():
-    # Import streamlit here only for the main block
     try:
         import streamlit as st
     except ImportError:
@@ -187,7 +167,6 @@ def web_scraper_main():
         st.write("---")
         st.subheader("1. Google Search Results")
         with st.spinner("Searching Google..."):
-            # Call synchronous version directly
             urls = google_search(user_question)
         if not urls or (isinstance(urls, list) and "Error" in urls[0]):
             st.error(f"Failed to get URLs: {urls[0] if urls else 'No results'}")
@@ -200,8 +179,6 @@ def web_scraper_main():
         web_content = ""
         scraped_urls = []
 
-        # Use ThreadPoolExecutor for concurrent scraping in the test interface
-        # scrape_url is synchronous, so this is okay here.
         with st.spinner("Scraping websites concurrently..."):
             with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
                 future_to_url = {executor.submit(scrape_url, url): url for url in urls}
@@ -238,7 +215,6 @@ def web_scraper_main():
         """
 
         with st.spinner("Asking LLM to synthesize answer..."):
-            # Call synchronous version directly
             llm_response = query_llm(prompt)
 
         st.write("---")

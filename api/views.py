@@ -1,10 +1,10 @@
 # api/views.py
 import asyncio
 from rest_framework.views import APIView
-from rest_framework import generics # <<< AUTH: Import generic views
+from rest_framework import generics 
 from rest_framework.response import Response
 from rest_framework import status, parsers
-from rest_framework.permissions import IsAuthenticated, AllowAny # <<< AUTH: Import permissions
+from rest_framework.permissions import IsAuthenticated, AllowAny 
 from django.shortcuts import get_object_or_404
 from django.http import Http404
 from django.conf import settings
@@ -14,7 +14,6 @@ import traceback
 import shutil
 from asgiref.sync import async_to_sync, sync_to_async
 
-# Import your agent and models/serializers
 from .agent import SubjectAgent
 from .models import ChatSession, ChatMessage
 from .serializers import (
@@ -22,8 +21,6 @@ from .serializers import (
     QueryRequestSerializer, QueryResponseSerializer
 )
 
-# --- Agent Instantiation ---
-# (Keep your existing agent instantiation logic)
 AGENTS = {
     subject: SubjectAgent(subject)
     for subject in ["Computer Science", "Math", "Physics"]
@@ -36,7 +33,6 @@ def _get_agent(subject):
         raise Http404(f"Subject agent '{subject}' not found.")
     return agent
 
-# --- Async DB Wrappers ---
 @sync_to_async
 def _save_message_async(chat_session, role, content):
     max_length = 10000
@@ -50,29 +46,17 @@ def _save_message_async(chat_session, role, content):
         print(f"Error saving message to DB for chat {chat_session.id}: {db_e}")
         traceback.print_exc()
 
-# <<< AUTH: Update to include user check for ownership
 @sync_to_async
 def _get_chat_session_for_user_async(chat_id, user):
     """Gets a chat session only if it belongs to the specified user."""
     # Use get_object_or_404 with owner filter
     return get_object_or_404(ChatSession, pk=chat_id, owner=user)
 
-# <<< AUTH: Remove unused async wrappers for ChatSession CRUD as generics handle them
-# @_sync_to_async
-# def _create_chat_session_async(name, subject, owner): ... # Replaced by perform_create
-# @_sync_to_async
-# def _get_all_chat_sessions_async(user): ... # Replaced by get_queryset
-# @_sync_to_async
-# def _update_chat_session_async(session, data): ... # Replaced by generic update
-# @_sync_to_async
-# def _delete_chat_session_async(session): ... # Replaced by generic delete
 
 
-# --- API Views ---
 
 class SubjectListView(APIView):
     """Lists available subjects (Public)."""
-    # <<< AUTH: Explicitly allow anyone to access this view
     permission_classes = [AllowAny]
 
     def get(self, request, format=None):
@@ -82,9 +66,7 @@ class SubjectListView(APIView):
 class KnowledgeBaseView(APIView):
     """Handles knowledge base creation (file uploads) (Authenticated)."""
     parser_classes = [parsers.MultiPartParser]
-    # <<< AUTH: Inherits IsAuthenticated permission from global settings
 
-    # (Keep your existing _handle_kb_upload_async helper method - no auth changes needed inside it)
     async def _handle_kb_upload_async(self, agent, files):
         temp_dir = tempfile.mkdtemp()
         print(f"Created temporary directory for KB upload: {temp_dir}")
@@ -119,9 +101,7 @@ class KnowledgeBaseView(APIView):
                  except Exception as cleanup_e:
                     print(f"Error cleaning up temporary directory {temp_dir}: {cleanup_e}")
 
-    # Synchronous view method
     def post(self, request, subject, format=None):
-        # <<< AUTH: request.user is available due to global IsAuthenticated permission
         try:
              agent = _get_agent(subject)
         except Http404 as e:
@@ -142,14 +122,12 @@ class KnowledgeBaseView(APIView):
              return Response({"error": f"Failed to process files: {type(e).__name__}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-# <<< AUTH: Refactor to use generic ListCreateAPIView
 class ChatSessionListCreateView(generics.ListCreateAPIView):
     """
     Lists chat sessions owned by the authenticated user (GET) or
     creates a new chat session for the authenticated user (POST).
     """
     serializer_class = ChatSessionSerializer
-    # <<< AUTH: Inherits IsAuthenticated permission from global settings
 
     def get_queryset(self):
         """
@@ -165,22 +143,18 @@ class ChatSessionListCreateView(generics.ListCreateAPIView):
         """
         subject = self.request.data.get('subject')
         if not subject or subject not in AGENTS:
-             # Raise validation error instead of returning Response directly in perform_create
              from rest_framework.exceptions import ValidationError
              raise ValidationError({"error": "Valid 'subject' is required and must exist."})
 
-        # <<< AUTH: Set the owner to the current user
         serializer.save(owner=self.request.user, subject=subject) # Pass subject explicitly if needed by model
 
 
-# <<< AUTH: Refactor to use generic RetrieveUpdateDestroyAPIView
 class ChatSessionDetailView(generics.RetrieveUpdateDestroyAPIView):
     """
     Retrieves (GET), updates (PATCH), or deletes (DELETE) a specific
     chat session owned by the authenticated user.
     """
     serializer_class = ChatSessionDetailSerializer # Use detail serializer for GET
-    # <<< AUTH: Inherits IsAuthenticated permission from global settings
     lookup_field = 'id' # <<< AUTH: Specify lookup field if your URL uses 'id' instead of 'pk'
 
     def get_queryset(self):
@@ -188,12 +162,9 @@ class ChatSessionDetailView(generics.RetrieveUpdateDestroyAPIView):
         Ensure users can only access their own chat sessions.
         """
         user = self.request.user
-        # The lookup_field ('id' in this case) will be applied to this filtered queryset
         return ChatSession.objects.filter(owner=user)
 
-    # <<< AUTH: Optional: Override update/perform_update if you need custom logic like subject validation on update
     def perform_update(self, serializer):
-        # Example: Validate subject if it's being changed
         if 'subject' in serializer.validated_data:
             new_subject = serializer.validated_data['subject']
             if new_subject not in AGENTS:
@@ -204,35 +175,25 @@ class ChatSessionDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 class QueryView(APIView):
     """Handles user queries for a specific chat (Authenticated)."""
-    # <<< AUTH: Inherits IsAuthenticated permission from global settings
 
-    # Async helper method updated for ownership check
     async def _handle_post_async(self, validated_data, user): # <<< AUTH: Accept user
         question = validated_data['question']
-        # Subject is taken from the chat session now, not request data directly
-        # subject = validated_data['subject'] # <<< Remove subject from direct input if desired
         chat_id = validated_data['chat_id']
 
-        # <<< AUTH: Use updated async DB wrapper to get session AND verify ownership
         chat_session = await _get_chat_session_for_user_async(chat_id, user)
 
-        # Get subject from the validated chat session
         subject = chat_session.subject
         if not subject:
              raise ValueError("Chat session is missing a subject.") # Or handle appropriately
         agent = _get_agent(subject) # Get agent based on session's subject
 
-        # --- Add User Message ---
         await _save_message_async(chat_session, 'user', question)
 
         response_data = None
         final_answer_to_save = None
         try:
-            # --- Get Comprehensive Answer ---
             response_data = await agent.get_comprehensive_answer(question)
 
-            # --- Process SUCCESSFUL response ---
-            # (Keep your existing response processing logic)
             if isinstance(response_data, dict) and 'final' in response_data:
                 final_answer_to_save = response_data.get("final", "Error: Agent response missing 'final' key.")
             elif isinstance(response_data, str):
@@ -245,7 +206,6 @@ class QueryView(APIView):
                 response_data = {'final': final_answer_to_save, 'rag': 'N/A', 'llm': 'N/A', 'web': 'N/A', 'sources': []}
                 raise ValueError("Agent returned invalid data structure.")
 
-            # --- Save Assistant Message ---
             await _save_message_async(chat_session, 'assistant', final_answer_to_save)
             return response_data
 
@@ -256,9 +216,7 @@ class QueryView(APIView):
              await _save_message_async(chat_session, 'assistant', error_message)
              raise e # Re-raise to be caught by the sync wrapper
 
-    # Synchronous main view method
     def post(self, request, format=None):
-        # <<< AUTH: request.user is available
         user = request.user
 
         request_serializer = QueryRequestSerializer(data=request.data)
@@ -269,10 +227,8 @@ class QueryView(APIView):
         validated_data = request_serializer.validated_data
 
         try:
-            # <<< AUTH: Pass user to the async handler
             response_data = async_to_sync(self._handle_post_async)(validated_data, user)
 
-            # (Keep your existing post-async validation and response logic)
             if not isinstance(response_data, dict) or not all(k in response_data for k in ['final', 'rag', 'llm', 'web', 'sources']):
                  print(f"Async helper returned unexpected or incomplete data structure: {response_data}")
                  raise ValueError("Internal processing error: Invalid response structure received.")

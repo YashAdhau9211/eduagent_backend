@@ -1,12 +1,8 @@
-# api/tests.py
-
 import uuid
 import asyncio
-# Use AsyncMock if available (Python 3.8+) for cleaner async mocking
 try:
     from unittest.mock import patch, MagicMock, AsyncMock
 except ImportError:
-    # Fallback for older Python versions if necessary, though less ideal
     from unittest.mock import patch, MagicMock
     AsyncMock = MagicMock # Basic fallback, might not work perfectly for all await cases
 
@@ -19,8 +15,6 @@ from .models import ChatSession, ChatMessage
 VALID_SUBJECT = "Computer Science"
 INVALID_SUBJECT = "Astrology"
 
-# --- SubjectAPITests and ChatSessionAPITests remain the same ---
-# ... (Keep the previous test classes for subjects and chats) ...
 class SubjectAPITests(APITestCase):
     """Tests for the /api/subjects/ endpoint."""
 
@@ -102,10 +96,8 @@ class ChatSessionAPITests(APITestCase):
         response = self.client.delete(self.detail_url)
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertEqual(ChatSession.objects.count(), initial_count - 1)
-# --- End Subject/Chat tests ---
 
 
-# Basic tests for KB - More complex testing requires mocking files/agent
 class KnowledgeBaseAPITests(APITestCase):
     """Basic tests for the /api/subjects/{subject}/kb/ endpoint."""
 
@@ -119,11 +111,8 @@ class KnowledgeBaseAPITests(APITestCase):
         response = self.client.post(url, {'files': []}, format='multipart')
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
-    # Example for mocking KB upload success
     @patch('api.agent.SubjectAgent.create_knowledge_base', new_callable=AsyncMock) # Use AsyncMock
     def test_kb_upload_success_mocked(self, mock_create_kb):
-        # AsyncMock is awaitable by default and returns None unless configured
-        # mock_create_kb.return_value = None # Explicitly set if needed
 
         url = reverse('knowledge-base', args=[VALID_SUBJECT])
         from django.core.files.uploadedfile import SimpleUploadedFile
@@ -132,17 +121,13 @@ class KnowledgeBaseAPITests(APITestCase):
 
         response = self.client.post(url, data, format='multipart')
 
-        # Should return 200 based on current view logic
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("message", response.data)
         mock_create_kb.assert_awaited_once() # Check that it was awaited
 
-# --- Modified QueryAPITests ---
 class QueryAPITests(APITestCase):
-    """Tests for the /api/query/ endpoint, mocking the agent."""
 
     def setUp(self):
-        """Create a chat session for query tests."""
         self.chat_session = ChatSession.objects.create(name="Query Test Chat", subject=VALID_SUBJECT)
         self.query_url = reverse('query')
         self.valid_payload = {
@@ -151,14 +136,10 @@ class QueryAPITests(APITestCase):
             'chat_id': str(self.chat_session.id)
         }
 
-    # Patch with AsyncMock explicitly
     @patch('api.agent.SubjectAgent.get_comprehensive_answer', new_callable=AsyncMock)
     def test_query_success(self, mock_get_answer):
         """Ensure a successful query returns 200 and expected data."""
 
-        # --- MODIFIED MOCK SETUP ---
-        # Configure the AsyncMock's return value directly.
-        # When awaited, it will return this dictionary.
         mock_response_dict = {
             'final': 'This is the mocked final answer.',
             'rag': 'Mocked RAG answer.',
@@ -167,9 +148,7 @@ class QueryAPITests(APITestCase):
             'sources': ['http://mock.url/1']
         }
         mock_get_answer.return_value = mock_response_dict
-        # --- END MODIFIED MOCK SETUP ---
 
-        # Make the POST request
         response = self.client.post(self.query_url, self.valid_payload, format='json')
 
         # Assertions
@@ -179,12 +158,9 @@ class QueryAPITests(APITestCase):
         # ... (other data assertions) ...
         self.assertEqual(response.data['sources'], ['http://mock.url/1'])
 
-        # Verify the mock was called (and implicitly awaited)
         mock_get_answer.assert_awaited_once_with(self.valid_payload['question'])
 
-        # Verify messages were saved
         self.assertEqual(ChatMessage.objects.count(), 2)
-        # ... (assertions for message content) ...
         asst_msg = ChatMessage.objects.filter(chat_session=self.chat_session, role='assistant').first()
         self.assertEqual(asst_msg.content, 'This is the mocked final answer.')
 
@@ -210,12 +186,10 @@ class QueryAPITests(APITestCase):
         response = self.client.post(self.query_url, payload, format='json')
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
-    # Patch with AsyncMock explicitly
     @patch('api.agent.SubjectAgent.get_comprehensive_answer', new_callable=AsyncMock)
     def test_query_agent_exception(self, mock_get_answer):
         """Ensure 500 is returned if the agent raises an exception."""
 
-        # Configure the AsyncMock to raise an exception when awaited
         mock_get_answer.side_effect = ValueError("Agent internal error")
 
         response = self.client.post(self.query_url, self.valid_payload, format='json')
@@ -223,9 +197,7 @@ class QueryAPITests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_500_INTERNAL_SERVER_ERROR)
         self.assertIn('error', response.data)
 
-        # Verify the correct error message was saved
         self.assertEqual(ChatMessage.objects.count(), 2) # User + Error Assistant Msg
         asst_msg = ChatMessage.objects.filter(chat_session=self.chat_session, role='assistant').first()
         self.assertIsNotNone(asst_msg)
-        # Check for the message saved by the except block in _handle_post_async
         self.assertIn("Sorry, an internal error occurred: ValueError", asst_msg.content)

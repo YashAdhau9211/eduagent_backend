@@ -1,4 +1,3 @@
-# eduagent_project/settings.py
 
 import os
 from pathlib import Path

@@ -1,29 +1,22 @@
-# api/agent.py
-
-import asyncio # For async operations
-import traceback  # For detailed error logging
-import os # For checking directory existence
-import re # For cleaning <think> tags
+import asyncio 
+import traceback  
+import os 
+import re 
 
 # Langchain imports
 from langchain.chains import RetrievalQA
 from langchain_ollama import ChatOllama
 from langchain_core.prompts import ChatPromptTemplate, HumanMessagePromptTemplate, SystemMessagePromptTemplate
-from langchain_core.runnables import RunnableParallel, RunnablePassthrough # For potential async chain structuring
+from langchain_core.runnables import RunnableParallel, RunnablePassthrough 
 
-# Use relative imports for modules within the same Django app
 from .utils import process_documents, get_retriever
-# Import the SYNCHRONOUS functions specifically for wrapping or direct use
 from .web_scraper import google_search, scrape_url, query_llm as sync_query_llm, extract_clean_answer
 
-# Try using httpx for async web requests if web_scraper is adapted
-# (Currently not used as scrape_url is sync and wrapped)
 try:
     import httpx
     ASYNC_HTTP_CLIENT = httpx.AsyncClient()
 except ImportError:
     ASYNC_HTTP_CLIENT = None
-    # print("Warning: httpx not installed. Web scraping might block if not adapted for async.")
 
 
 class SubjectAgent:
@@ -35,19 +28,15 @@ class SubjectAgent:
             subject (str): The subject this agent specializes in (e.g., "Math").
         """
         self.subject = subject
-        # Store only the directory NAME, relies on utils to build full path
         self.subject_persist_dir_name = f"chroma_db_{self.subject.replace(' ', '_').lower()}"
-        self.vector_store = None # In-memory store reference (optional after creation)
-        self.qa_chain = None # Cache the initialized QA chain
+        self.vector_store = None 
+        self.qa_chain = None 
 
-        # Initialize LLM - Check if ChatOllama supports async initialization if needed
-        # Consider making model/temp configurable via settings
         self.llm = ChatOllama(model="deepseek-r1:1.5b", temperature=0.3)
         print(f"Initialized SubjectAgent for: {self.subject}")
 
     def get_custom_prompt(self):
         """Returns a subject-specific prompt template for RAG."""
-        # Subject-specific system prompt guidelines.
         if self.subject == "Computer Science":
             system_message = (
                 f"You are an educational assistant specialized in {self.subject}. "
@@ -94,16 +83,14 @@ class SubjectAgent:
         """
         print(f"Starting knowledge base creation for {self.subject} using dir name: {self.subject_persist_dir_name}")
         try:
-            # Run the synchronous process_documents function in a thread executor
             loop = asyncio.get_running_loop()
-            # process_documents now accepts paths, the view handles saving UploadedFile
             self.vector_store = await loop.run_in_executor(
-                None, # Use default ThreadPoolExecutor
-                process_documents, # The synchronous function expecting paths
-                uploaded_files_or_paths, # Pass the list (should be paths from the view)
+                None, 
+                process_documents, 
+                uploaded_files_or_paths, 
                 self.subject_persist_dir_name
             )
-            self.qa_chain = None  # Reset the QA chain
+            self.qa_chain = None  
             if self.vector_store:
                 print(f"Knowledge base creation/update finished successfully for {self.subject}.")
             else:
@@ -114,7 +101,7 @@ class SubjectAgent:
              traceback.print_exc()
              self.vector_store = None
              self.qa_chain = None
-             raise e # Propagate the error to the caller (view)
+             raise e 
 
     def initialize_qa_chain(self):
         """Initializes the RetrievalQA chain (synchronous)."""
@@ -144,8 +131,6 @@ class SubjectAgent:
     async def get_rag_answer(self, question):
         """Gets an answer using the agent's RAG setup asynchronously."""
         print(f"Getting RAG answer for {self.subject}...")
-        # Initialize chain if needed (synchronous check/init)
-        # Use run_in_executor if initialize_qa_chain becomes significantly blocking
         if not self.initialize_qa_chain():
              return f"Error initializing QA chain for {self.subject}. Knowledge base might be missing or corrupt. Please try creating/updating it."
 
@@ -157,7 +142,6 @@ class SubjectAgent:
 
                 if isinstance(response, dict) and "result" in response:
                      result_text = response["result"].strip()
-                     # --- Non-answer detection logic ---
                      non_answer_phrases = ["cannot find relevant information", "context doesn't contain", "context does not contain", "based on the context provided", "based on the text provided", "information provided does not", "i cannot answer"]
                      is_non_answer = any(phrase in result_text.lower() for phrase in non_answer_phrases)
                      is_too_short = len(result_text) < 50 and ("based on" in result_text.lower() or "context" in result_text.lower())
@@ -173,11 +157,9 @@ class SubjectAgent:
                  print("Warning: ainvoke not implemented for RAG chain, falling back to sync.")
                  try:
                      loop = asyncio.get_running_loop()
-                     # Run the synchronous invoke method in an executor
                      response = await loop.run_in_executor(None, self.qa_chain.invoke, {"query": question})
                      if isinstance(response, dict) and "result" in response:
                           result_text = response["result"].strip()
-                          # Duplicate non-answer check
                           non_answer_phrases = ["cannot find relevant information", "context doesn't contain", "context does not contain", "based on the context provided", "based on the text provided", "information provided does not", "i cannot answer"]
                           is_non_answer = any(phrase in result_text.lower() for phrase in non_answer_phrases)
                           is_too_short = len(result_text) < 50 and ("based on" in result_text.lower() or "context" in result_text.lower())
@@ -220,7 +202,6 @@ class SubjectAgent:
             print(traceback.format_exc())
             return "An error occurred while contacting the Language Model."
 
-    # Helper method for web content processing
     async def _process_web_content(self, question, urls):
         """Scrapes URLs, synthesizes answer using LLM asynchronously."""
         print(f"Starting async web content processing for {self.subject}...")
@@ -228,13 +209,11 @@ class SubjectAgent:
         successful_scrapes = 0
         failed_scrapes = 0
 
-        # --- Async Scraping ---
         async def scrape_in_executor(url):
              loop = asyncio.get_running_loop()
              return await loop.run_in_executor(None, scrape_url, url)
 
         scrape_tasks = [scrape_in_executor(url) for url in urls]
-        # Use return_exceptions=True to prevent gather from stopping on first error
         scrape_results = await asyncio.gather(*scrape_tasks, return_exceptions=True)
 
         for i, result in enumerate(scrape_results):
@@ -242,14 +221,12 @@ class SubjectAgent:
                   failed_scrapes += 1
                   if isinstance(result, Exception):
                       print(f"Scraping task failed for url {urls[i]}: {result}")
-                      # Optionally log traceback here if needed
              else:
                   web_content += result + "\n\n"
                   successful_scrapes += 1
         print(f"Async web scraping finished for {self.subject}. Success: {successful_scrapes}, Failed: {failed_scrapes}")
 
         if not web_content:
-             # Be more specific about the failure reason
              if successful_scrapes == 0 and failed_scrapes > 0: return "Found websites, but failed to scrape content from any of them."
              if successful_scrapes == 0 and failed_scrapes == 0: return "No websites provided for scraping." # Should not happen if urls has items
              return "Scraped some websites, but could not extract meaningful content."
@@ -270,17 +247,13 @@ class SubjectAgent:
         Answer:
         """
         try:
-            # --- FIXED: Wrap the SYNCHRONOUS sync_query_llm call ---
             loop = asyncio.get_running_loop()
-            # sync_query_llm was imported from .web_scraper at the top
             llm_response = await loop.run_in_executor(
                 None,             # Use default executor
                 sync_query_llm,   # The synchronous function from web_scraper.py
                 prompt            # Argument for the function
             )
-            # --- End of fix ---
 
-            # Check if sync_query_llm itself returned an error message string
             if isinstance(llm_response, str) and "Error:" in llm_response:
                  print(f"Web synthesis LLM failed internally: {llm_response}")
                  return "Error synthesizing answer from web content." # Return generic error
@@ -341,11 +314,9 @@ class SubjectAgent:
         ])
         prompt = aggregator_prompt_template.format(question=question, rag_answer=rag_input, llm_answer=llm_input, web_answer=web_input)
 
-        # --- Helper function for cleaning ---
         def clean_llm_output(text):
             if not isinstance(text, str):
                 return text # Return as is if not a string
-            # Regex to remove <think>...</think> blocks and potential surrounding whitespace
             cleaned = re.sub(r"<think>.*?</think>\s*", "", text, flags=re.DOTALL)
             return cleaned.strip() # Remove leading/trailing whitespace
 
@@ -387,7 +358,6 @@ class SubjectAgent:
         print(f"Starting async comprehensive answer generation for: {question} (Subject: {self.subject})")
         results = { "rag": None, "llm": None, "web": None, "final": "Processing...", "sources": [] }
 
-        # --- Step 1: Perform Google Search (Wrapped Sync) ---
         web_urls = []
         initial_web_error = None
         try:
@@ -412,7 +382,6 @@ class SubjectAgent:
             results["sources"] = ["Web search error."]
             print(traceback.format_exc())
 
-        # --- Step 2 & 3: Run RAG, LLM, Web Processing Concurrently ---
         tasks_to_run = []
         tasks_to_run.append(self.get_rag_answer(question))
         tasks_to_run.append(self.get_llm_answer(question))
@@ -420,21 +389,17 @@ class SubjectAgent:
         if should_run_web_task:
             tasks_to_run.append(self._process_web_content(question, web_urls))
         else:
-            # Define placeholder coroutine if web search failed initially
             async def web_result_placeholder(): return results["web"]
             tasks_to_run.append(web_result_placeholder())
 
         try:
-            # Run tasks concurrently and capture results or exceptions
             task_results = await asyncio.gather(*tasks_to_run, return_exceptions=True)
 
-            # Assign results, handling potential exceptions from gather
             results["rag"] = task_results[0] if not isinstance(task_results[0], Exception) else f"Error in RAG task: {task_results[0]}"
             results["llm"] = task_results[1] if not isinstance(task_results[1], Exception) else f"Error in LLM task: {task_results[1]}"
             if not initial_web_error: # Only update if search succeeded initially
                 results["web"] = task_results[2] if not isinstance(task_results[2], Exception) else f"Error in Web Processing task: {task_results[2]}"
 
-            # Log any exceptions that occurred within the gathered tasks
             for i, res in enumerate(task_results):
                 if isinstance(res, Exception):
                     print(f"Exception occurred in gathered task {i}: {res}")
@@ -444,26 +409,21 @@ class SubjectAgent:
         except Exception as gather_e:
              print(f"Critical error during asyncio.gather: {gather_e}")
              traceback.print_exc()
-             # Mark results as failed if gather itself failed
              results["rag"] = results["rag"] or "Error during concurrent fetch"
              results["llm"] = results["llm"] or "Error during concurrent fetch"
              results["web"] = results["web"] or "Error during concurrent fetch"
 
-        # --- Step 4: Aggregate ---
-        # Ensure results passed to aggregation are strings, providing defaults if None
         rag_res = results.get("rag") if isinstance(results.get("rag"), str) else "RAG process did not return a valid string."
         llm_res = results.get("llm") if isinstance(results.get("llm"), str) else "LLM process did not return a valid string."
         web_res = results.get("web") if isinstance(results.get("web"), str) else "Web process did not return a valid string."
 
         try:
-             # aggregate_answers already handles cleaning and returns a string
              results["final"] = await self.aggregate_answers(question, rag_res, llm_res, web_res)
         except Exception as agg_e:
              print(f"Error calling aggregate_answers: {agg_e}")
              results["final"] = "An error occurred during final answer aggregation."
              print(traceback.format_exc())
 
-        # Final check in case aggregation itself returned None/empty after cleaning
         if not results["final"]:
             results["final"] = "Aggregation resulted in an empty answer."
 
