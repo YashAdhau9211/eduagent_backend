@@ -15,7 +15,7 @@ This repository contains the Django/DRF backend API for EduAgent.ai, an AI-power
 
 ## Overview
 
-EduAgent.ai allows users to interact with subject-specific AI agents. This backend provides the API endpoints necessary for the [EduAgent.ai Frontend](https://github.com/YashAdhau9211/eduagent_backend) to function. Its core responsibilities include:
+EduAgent.ai allows users to interact with subject-specific AI agents. This backend provides the API endpoints necessary for the [EduAgent.ai Frontend](https://github.com/YashAdhau9211/eduagent-frontend) to function. Its core responsibilities include:
 
 *   **User Authentication:** Handling user registration and login using JWT (JSON Web Tokens).
 *   **API Endpoints:** Providing RESTful endpoints for managing subjects, chat sessions, chat messages, and knowledge bases.
